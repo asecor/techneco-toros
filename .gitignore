@@ -218,3 +218,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+__pycache__/
+*.py[cod]
+.venv/
+deploy/cloud/config.toml
+deploy/cloud/data/
