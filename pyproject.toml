@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "toros-cloud"
+version = "0.1.0"
+description = "Standalone TCP bridge and InfluxDB writer for Toros heat-pump Wi-Fi telemetry"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = []
+
+[project.scripts]
+toros-cloud = "toros_cloud.cli:main"
+
+[tool.setuptools]
+packages = ["toros_cloud"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

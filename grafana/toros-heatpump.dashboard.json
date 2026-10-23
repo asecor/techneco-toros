@@ -1,0 +1,278 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "graphTooltip": 1,
+  "panels": [
+    {"collapsed": false, "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0}, "id": 1, "panels": [], "title": "Heat pump (live)", "type": "row"},
+    {
+      "datasource": {"type": "influxdb", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"decimals": 1, "unit": "celsius"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 1},
+      "id": 10,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"},
+      "targets": [{"datasource": {"type": "influxdb", "uid": "${datasource}"}, "query": "SELECT last(\"tbu_c\") FROM \"hp_live\" WHERE $timeFilter", "rawQuery": true, "refId": "A", "resultFormat": "time_series"}],
+      "title": "Outdoor",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "influxdb", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"decimals": 1, "unit": "celsius"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 1},
+      "id": 11,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"},
+      "targets": [{"datasource": {"type": "influxdb", "uid": "${datasource}"}, "query": "SELECT last(\"ttw_c\") FROM \"hp_live\" WHERE $timeFilter", "rawQuery": true, "refId": "A", "resultFormat": "time_series"}],
+      "title": "Hot water",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "influxdb", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"decimals": 1, "unit": "celsius"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 8, "y": 1},
+      "id": 12,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"},
+      "targets": [{"datasource": {"type": "influxdb", "uid": "${datasource}"}, "query": "SELECT last(\"room_c\") FROM \"hp_live\" WHERE $timeFilter", "rawQuery": true, "refId": "A", "resultFormat": "time_series"}],
+      "title": "Room (thermostat)",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "influxdb", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"decimals": 1, "unit": "celsius"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 12, "y": 1},
+      "id": 13,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"},
+      "targets": [{"datasource": {"type": "influxdb", "uid": "${datasource}"}, "query": "SELECT last(\"tau_c\") FROM \"hp_live\" WHERE $timeFilter", "rawQuery": true, "refId": "A", "resultFormat": "time_series"}],
+      "title": "Heating water out (Tau)",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "influxdb", "uid": "${datasource}"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "decimals": 0,
+          "mappings": [{"options": {"0": {"color": "green", "text": "none"}}, "type": "value"}],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]},
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 16, "y": 1},
+      "id": 14,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"},
+      "targets": [{"datasource": {"type": "influxdb", "uid": "${datasource}"}, "query": "SELECT last(\"fault\") FROM \"hp_live\" WHERE $timeFilter", "rawQuery": true, "refId": "A", "resultFormat": "time_series"}],
+      "title": "Fault code",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "influxdb", "uid": "${datasource}"},
+      "description": "When the bridge last wrote a point (normally under a minute ago). If it is hours old, check the toros-cloud container and the DNS override for the module's server name.",
+      "fieldConfig": {"defaults": {"unit": "dateTimeFromNow"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 20, "y": 1},
+      "id": 15,
+      "options": {"colorMode": "value", "graphMode": "none", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "/^Time$/", "values": false}, "textMode": "value"},
+      "targets": [{"datasource": {"type": "influxdb", "uid": "${datasource}"}, "query": "SELECT last(\"tbu_c\") FROM \"hp_live\" WHERE time > now() - 7d", "rawQuery": true, "refId": "A", "resultFormat": "table"}],
+      "title": "Last data from heat pump",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "influxdb", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"custom": {"drawStyle": "line", "fillOpacity": 0, "lineWidth": 1, "showPoints": "never", "spanNulls": 300000}, "decimals": 1, "unit": "celsius"}, "overrides": []},
+      "gridPos": {"h": 9, "w": 24, "x": 0, "y": 5},
+      "id": 16,
+      "options": {"legend": {"calcs": ["lastNotNull", "min", "max"], "displayMode": "table", "placement": "right", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "none"}},
+      "targets": [{"datasource": {"type": "influxdb", "uid": "${datasource}"}, "query": "SELECT mean(\"tbu_c\") AS \"Outdoor\", mean(\"ttw_c\") AS \"Hot water\", mean(\"room_c\") AS \"Room\", mean(\"tci_c\") AS \"Return (Tci)\", mean(\"tcu_c\") AS \"Condenser out (Tcu)\", mean(\"tau_c\") AS \"Heating water out (Tau)\", mean(\"tvi_c\") AS \"Brine in (Tvi)\", mean(\"tvu_c\") AS \"Brine out (Tvu)\" FROM \"hp_live\" WHERE $timeFilter GROUP BY time($__interval) fill(null)", "rawQuery": true, "refId": "A", "resultFormat": "time_series"}],
+      "title": "Temperatures (live)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "influxdb", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"custom": {"drawStyle": "line", "fillOpacity": 0, "lineWidth": 1, "showPoints": "never", "spanNulls": 300000}, "decimals": 1, "unit": "celsius"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 14},
+      "id": 17,
+      "options": {"legend": {"calcs": ["lastNotNull", "min", "max"], "displayMode": "table", "placement": "right", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "none"}},
+      "targets": [{"datasource": {"type": "influxdb", "uid": "${datasource}"}, "query": "SELECT mean(\"tcu_c\") - mean(\"tci_c\") AS \"Condenser delta-T (Tcu - Tci)\", mean(\"tvi_c\") - mean(\"tvu_c\") AS \"Brine delta-T (Tvi - Tvu)\" FROM \"hp_live\" WHERE $timeFilter GROUP BY time($__interval) fill(null)", "rawQuery": true, "refId": "A", "resultFormat": "time_series"}],
+      "title": "Water and brine delta-T (live)",
+      "type": "timeseries"
+    },
+    {"collapsed": false, "gridPos": {"h": 1, "w": 24, "x": 0, "y": 22}, "id": 2, "panels": [], "title": "Runtime and starts (cumulative counters)", "type": "row"},
+    {
+      "datasource": {"type": "influxdb", "uid": "${datasource}"},
+      "description": "Record 224.",
+      "fieldConfig": {"defaults": {"decimals": 0, "unit": "h"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 23},
+      "id": 20,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"},
+      "targets": [{"datasource": {"type": "influxdb", "uid": "${datasource}"}, "query": "SELECT last(\"hours_compressor_total\") FROM \"hp_live\" WHERE time > now() - 30d", "rawQuery": true, "refId": "A", "resultFormat": "time_series"}],
+      "title": "Total compressor hours",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "influxdb", "uid": "${datasource}"},
+      "description": "Record 220.",
+      "fieldConfig": {"defaults": {"decimals": 0, "unit": "h"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 23},
+      "id": 21,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"},
+      "targets": [{"datasource": {"type": "influxdb", "uid": "${datasource}"}, "query": "SELECT last(\"hours_heating_compressor\") FROM \"hp_live\" WHERE time > now() - 30d", "rawQuery": true, "refId": "A", "resultFormat": "time_series"}],
+      "title": "Heating compressor hours",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "influxdb", "uid": "${datasource}"},
+      "description": "Record 197.",
+      "fieldConfig": {"defaults": {"decimals": 0, "unit": "h"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 8, "y": 23},
+      "id": 22,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"},
+      "targets": [{"datasource": {"type": "influxdb", "uid": "${datasource}"}, "query": "SELECT last(\"hours_cooling_passive\") FROM \"hp_live\" WHERE time > now() - 30d", "rawQuery": true, "refId": "A", "resultFormat": "time_series"}],
+      "title": "Passive cooling hours",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "influxdb", "uid": "${datasource}"},
+      "description": "Record 221.",
+      "fieldConfig": {"defaults": {"decimals": 0, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 12, "y": 23},
+      "id": 23,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"},
+      "targets": [{"datasource": {"type": "influxdb", "uid": "${datasource}"}, "query": "SELECT last(\"starts_heating_compressor\") FROM \"hp_live\" WHERE time > now() - 30d", "rawQuery": true, "refId": "A", "resultFormat": "time_series"}],
+      "title": "Heating compressor starts",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "influxdb", "uid": "${datasource}"},
+      "description": "Record 198.",
+      "fieldConfig": {"defaults": {"decimals": 0, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 16, "y": 23},
+      "id": 24,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"},
+      "targets": [{"datasource": {"type": "influxdb", "uid": "${datasource}"}, "query": "SELECT last(\"starts_dhw_compressor\") FROM \"hp_live\" WHERE time > now() - 30d", "rawQuery": true, "refId": "A", "resultFormat": "time_series"}],
+      "title": "Hot water compressor starts",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "influxdb", "uid": "${datasource}"},
+      "description": "Record 225.",
+      "fieldConfig": {"defaults": {"decimals": 0, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 20, "y": 23},
+      "id": 25,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"},
+      "targets": [{"datasource": {"type": "influxdb", "uid": "${datasource}"}, "query": "SELECT last(\"starts_cooling_passive\") FROM \"hp_live\" WHERE time > now() - 30d", "rawQuery": true, "refId": "A", "resultFormat": "time_series"}],
+      "title": "Passive cooling starts",
+      "type": "stat"
+    },
+    {"collapsed": false, "gridPos": {"h": 1, "w": 24, "x": 0, "y": 27}, "id": 3, "panels": [], "title": "Electrical energy counters (8-bit, wrap at 256 kWh)", "type": "row"},
+    {
+      "datasource": {"type": "influxdb", "uid": "${datasource}"},
+      "description": "Record 8.",
+      "fieldConfig": {"defaults": {"decimals": 0, "unit": "kwatth"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 28},
+      "id": 30,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"},
+      "targets": [{"datasource": {"type": "influxdb", "uid": "${datasource}"}, "query": "SELECT last(\"kwh_standby\") FROM \"hp_live\" WHERE time > now() - 30d", "rawQuery": true, "refId": "A", "resultFormat": "time_series"}],
+      "title": "Standby",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "influxdb", "uid": "${datasource}"},
+      "description": "Record 9.",
+      "fieldConfig": {"defaults": {"decimals": 0, "unit": "kwatth"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 28},
+      "id": 31,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"},
+      "targets": [{"datasource": {"type": "influxdb", "uid": "${datasource}"}, "query": "SELECT last(\"kwh_heating_compressor\") FROM \"hp_live\" WHERE time > now() - 30d", "rawQuery": true, "refId": "A", "resultFormat": "time_series"}],
+      "title": "Space heating (compressor)",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "influxdb", "uid": "${datasource}"},
+      "description": "Record 11.",
+      "fieldConfig": {"defaults": {"decimals": 0, "unit": "kwatth"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 28},
+      "id": 32,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"},
+      "targets": [{"datasource": {"type": "influxdb", "uid": "${datasource}"}, "query": "SELECT last(\"kwh_dhw_compressor\") FROM \"hp_live\" WHERE time > now() - 30d", "rawQuery": true, "refId": "A", "resultFormat": "time_series"}],
+      "title": "Hot water (compressor)",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "influxdb", "uid": "${datasource}"},
+      "description": "Record 13.",
+      "fieldConfig": {"defaults": {"decimals": 0, "unit": "kwatth"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 28},
+      "id": 33,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"},
+      "targets": [{"datasource": {"type": "influxdb", "uid": "${datasource}"}, "query": "SELECT last(\"kwh_cooling_passive\") FROM \"hp_live\" WHERE time > now() - 30d", "rawQuery": true, "refId": "A", "resultFormat": "time_series"}],
+      "title": "Passive cooling",
+      "type": "stat"
+    },
+    {"collapsed": false, "gridPos": {"h": 1, "w": 24, "x": 0, "y": 32}, "id": 4, "panels": [], "title": "Current operating state", "type": "row"},
+    {
+      "datasource": {"type": "influxdb", "uid": "${datasource}"},
+      "description": "Record 7: evaporator flow sensor pulse frequency.",
+      "fieldConfig": {"defaults": {"decimals": 0, "unit": "hertz"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 33},
+      "id": 40,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"},
+      "targets": [{"datasource": {"type": "influxdb", "uid": "${datasource}"}, "query": "SELECT last(\"fvd_hz\") FROM \"hp_live\" WHERE $timeFilter", "rawQuery": true, "refId": "A", "resultFormat": "time_series"}],
+      "title": "Evaporator flow sensor",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "influxdb", "uid": "${datasource}"},
+      "description": "Record 190.",
+      "fieldConfig": {"defaults": {"decimals": 0, "unit": "none"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 33},
+      "id": 41,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"},
+      "targets": [{"datasource": {"type": "influxdb", "uid": "${datasource}"}, "query": "SELECT last(\"distribution_state\") FROM \"hp_live\" WHERE $timeFilter", "rawQuery": true, "refId": "A", "resultFormat": "time_series"}],
+      "title": "Distribution state",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "influxdb", "uid": "${datasource}"},
+      "description": "Record 235, bitfield (1 = standby).",
+      "fieldConfig": {"defaults": {"decimals": 0, "unit": "none"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 8, "y": 33},
+      "id": 42,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"},
+      "targets": [{"datasource": {"type": "influxdb", "uid": "${datasource}"}, "query": "SELECT last(\"monitor_state\") FROM \"hp_live\" WHERE $timeFilter", "rawQuery": true, "refId": "A", "resultFormat": "time_series"}],
+      "title": "Monitor state",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "influxdb", "uid": "${datasource}"},
+      "description": "Record 279.",
+      "fieldConfig": {"defaults": {"decimals": 1, "unit": "celsius"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 12, "y": 33},
+      "id": 43,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"},
+      "targets": [{"datasource": {"type": "influxdb", "uid": "${datasource}"}, "query": "SELECT last(\"ot_room_setpoint_c\") FROM \"hp_live\" WHERE $timeFilter", "rawQuery": true, "refId": "A", "resultFormat": "time_series"}],
+      "title": "OpenTherm room setpoint",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "influxdb", "uid": "${datasource}"},
+      "description": "Record 192.",
+      "fieldConfig": {"defaults": {"decimals": 1, "unit": "celsius"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 16, "y": 33},
+      "id": 44,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"},
+      "targets": [{"datasource": {"type": "influxdb", "uid": "${datasource}"}, "query": "SELECT last(\"control_value_c\") FROM \"hp_live\" WHERE $timeFilter", "rawQuery": true, "refId": "A", "resultFormat": "time_series"}],
+      "title": "Control value",
+      "type": "stat"
+    }
+  ],
+  "refresh": "1m",
+  "schemaVersion": 39,
+  "tags": ["heat-pump", "toros"],
+  "templating": {
+    "list": [
+      {"current": {}, "hide": 0, "includeAll": false, "label": "Data source", "multi": false, "name": "datasource", "options": [], "query": "influxdb", "refresh": 1, "regex": "", "type": "datasource"}
+    ]
+  },
+  "time": {"from": "now-6h", "to": "now"},
+  "timezone": "browser",
+  "title": "Toros Vision heat pump (live)",
+  "uid": "toros-heatpump"
+}

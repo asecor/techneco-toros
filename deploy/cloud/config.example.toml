@@ -1,0 +1,13 @@
+[cloud]
+listen = "0.0.0.0"
+port = 7001
+mode = "auto"
+upstream = "20.238.153.143:7001"
+# IP address of the heat pump's Wi-Fi module; an empty list accepts any client
+allow = ["192.0.2.10"]
+connect_timeout = 10.0
+idle_timeout = 900
+influx_url = "http://influxdb:8086"
+influx_db = "toros"
+measurement = "hp_live"
+archive_directory = "/data/archive"

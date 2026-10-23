@@ -1,0 +1,24 @@
+services:
+  toros-cloud:
+    build: ../..
+    image: toros-cloud:local
+    container_name: toros-cloud
+    restart: unless-stopped
+    ports:
+      - "7001:7001"
+    volumes:
+      - ./config.toml:/config/config.toml:ro
+      - ./data:/data
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 128m
+    logging:
+      options: {max-size: "10m", max-file: "3"}
+
+# To reach an InfluxDB container on another Docker network, add under the service
+# `networks: [default, influx]` and declare it here:
+# networks:
+#   influx:
+#     name: <existing network name>
+#     external: true
