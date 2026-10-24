@@ -119,13 +119,13 @@
     },
     {
       "datasource": {"type": "influxdb", "uid": "${datasource}"},
-      "description": "Record 197.",
+      "description": "Record 197. Hot water run hours (was labelled passive cooling until 2026-10-24).",
       "fieldConfig": {"defaults": {"decimals": 0, "unit": "h"}, "overrides": []},
       "gridPos": {"h": 4, "w": 4, "x": 8, "y": 23},
       "id": 22,
       "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"},
-      "targets": [{"datasource": {"type": "influxdb", "uid": "${datasource}"}, "query": "SELECT last(\"hours_cooling_passive\") FROM \"hp_live\" WHERE time > now() - 30d", "rawQuery": true, "refId": "A", "resultFormat": "time_series"}],
-      "title": "Passive cooling hours",
+      "targets": [{"datasource": {"type": "influxdb", "uid": "${datasource}"}, "query": "SELECT last(\"hours_dhw\") FROM \"hp_live\" WHERE time > now() - 30d", "rawQuery": true, "refId": "A", "resultFormat": "time_series"}],
+      "title": "Hot water hours",
       "type": "stat"
     },
     {
@@ -175,23 +175,23 @@
     },
     {
       "datasource": {"type": "influxdb", "uid": "${datasource}"},
-      "description": "Record 9.",
+      "description": "Record 11. Space heating (by elimination; not yet seen stepping in a heating run).",
       "fieldConfig": {"defaults": {"decimals": 0, "unit": "kwatth"}, "overrides": []},
       "gridPos": {"h": 4, "w": 6, "x": 6, "y": 28},
       "id": 31,
       "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"},
-      "targets": [{"datasource": {"type": "influxdb", "uid": "${datasource}"}, "query": "SELECT last(\"kwh_heating_compressor\") FROM \"hp_live\" WHERE time > now() - 30d", "rawQuery": true, "refId": "A", "resultFormat": "time_series"}],
+      "targets": [{"datasource": {"type": "influxdb", "uid": "${datasource}"}, "query": "SELECT last(\"kwh_heating\") FROM \"hp_live\" WHERE time > now() - 30d", "rawQuery": true, "refId": "A", "resultFormat": "time_series"}],
       "title": "Space heating (compressor)",
       "type": "stat"
     },
     {
       "datasource": {"type": "influxdb", "uid": "${datasource}"},
-      "description": "Record 11.",
+      "description": "Record 9. Hot water (confirmed by a hot-water-only run on 2026-10-23).",
       "fieldConfig": {"defaults": {"decimals": 0, "unit": "kwatth"}, "overrides": []},
       "gridPos": {"h": 4, "w": 6, "x": 12, "y": 28},
       "id": 32,
       "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"},
-      "targets": [{"datasource": {"type": "influxdb", "uid": "${datasource}"}, "query": "SELECT last(\"kwh_dhw_compressor\") FROM \"hp_live\" WHERE time > now() - 30d", "rawQuery": true, "refId": "A", "resultFormat": "time_series"}],
+      "targets": [{"datasource": {"type": "influxdb", "uid": "${datasource}"}, "query": "SELECT last(\"kwh_dhw\") FROM \"hp_live\" WHERE time > now() - 30d", "rawQuery": true, "refId": "A", "resultFormat": "time_series"}],
       "title": "Hot water (compressor)",
       "type": "stat"
     },

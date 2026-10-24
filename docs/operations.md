@@ -67,13 +67,13 @@ Records 189, 241 and 251 read as implausible values (for example -62 °C, 196.8 
 |---|---|---|---|
 | `hours_compressor_total` | Total compressor operating hours | 224 | Cumulative hours |
 | `hours_heating_compressor` | Space heating compressor run hours (Actief CV) | 220 | Cumulative hours |
-| `hours_cooling_passive` | Passive cooling run hours (Passief koel uren) | 197 | Cumulative hours |
+| `hours_dhw` | Hot water compressor run hours (was `hours_cooling_passive`, see below) | 197 | Cumulative hours |
 | `starts_heating_compressor` | Space heating compressor starts (Actief CV) | 221 | Cumulative integer |
 | `starts_dhw_compressor` | Domestic hot water compressor starts (Actief tap) | 198 | Cumulative integer |
 | `starts_cooling_passive` | Passive cooling cycle starts (Passief koel) | 225 | Cumulative integer |
 | `kwh_standby` | Standby electrical energy counter | 8 | 8-bit counter, wraps at 256 |
-| `kwh_heating_compressor` | Space heating electrical energy counter | 9 | 8-bit counter, wraps at 256 |
-| `kwh_dhw_compressor` | Hot water electrical energy counter | 11 | 8-bit counter, wraps at 256 |
+| `kwh_dhw` | Hot water electrical energy counter (was `kwh_heating_compressor`) | 9 | 8-bit counter, wraps at 256 |
+| `kwh_heating` | Space heating electrical energy counter (was `kwh_dhw_compressor`) | 11 | 8-bit counter, wraps at 256 |
 | `kwh_cooling_passive` | Passive cooling electrical energy counter | 13 | 8-bit counter, wraps at 256 |
 
 Unused or zero-valued modes on a typical installation (emergency heating, electric heating elements, active cooling) correspond to the remaining ids 10, 12, 14, 184–186, 196, 199–201, 219, 222–223, 226–233 and 248–252.
@@ -87,14 +87,16 @@ The controller's own lifetime energy counters. Each is a single byte (0 to 255 k
 | Record id | Controller register | hp_live field | Mode |
 |:---:|---|---|---|
 | 8 | `Standby_kWh` | `kwh_standby` | Standby consumption |
-| 9 | `Actief_CV_kWh` | `kwh_heating_compressor` | Space heating with the compressor |
+| 9 | (map says `Actief_CV_kWh`) | `kwh_dhw` | Hot water with the compressor (observed) |
 | 10 | `EE_CV_kWh` | not mapped | Electric element, space heating |
-| 11 | `Actief_tap_kWh` | `kwh_dhw_compressor` | Hot water with the compressor |
+| 11 | (map says `Actief_tap_kWh`) | `kwh_heating` | Space heating with the compressor (by elimination) |
 | 12 | `EE_tap_kWh` | not mapped | Electric element, hot water |
 | 13 | `Passief_koel_kWh` | `kwh_cooling_passive` | Passive cooling (pumps) |
 | 14 | `Actief_koel_kWh` | not mapped | Active cooling with the compressor |
 
 When graphing these, handle the wrap at 256, for example with `non_negative_derivative`, or by unwrapping in the query.
+
+**Relabelled 2026-10-24.** The community register map's labels for records 9, 11 and 197 do not match this unit. During a hot-water-only run on 2026-10-23 (16:44 to 18:07 UTC: setpoint 60 °C, distribution state 7, cylinder 50.7 to 55.2 °C, heating hours and starts unchanged), record 198 (hot water starts) stepped at the start, and records 9 and 197 each stepped by 1 at 17:32; record 11 did not move. Their rise since the last vendor export (Feb 2026) agrees: record 197 +505 h against about 490 h of hot water a year, record 9 +473 kWh (one wrap) against about 506 kWh predicted. Record 11 as heating is by elimination and its +28 kWh fits the +67 heating hours; it still needs a heating run to confirm. Record 224 stayed constant through the 83-minute run, so it is not a running hour counter. Before 2026-10-24 the same values are stored under the old names too (backfilled under the new names, old fields kept).
 
 ### Runtime counters as a power proxy
 
