@@ -4,9 +4,11 @@ Frame: A5, sequence, type, payload length (2 bytes LE), payload, 16-bit sum of a
 A type 0x30 frame has 14 header bytes after the length, then 7-byte records: id (3 bytes LE), value (4 bytes LE, signed).
 """
 import asyncio
+import collections
 import datetime
 import json
 import logging
+import os
 from pathlib import Path
 import queue
 import threading
@@ -19,10 +21,22 @@ log = logging.getLogger(__name__)
 START = 0xA5
 ACK = 0x01
 DATA = 0x30
-ACKED_KINDS = {DATA}          # the only type the real server was seen acknowledging
+HELLO = 0x12                  # module -> server every ~10 s: firmware string and MAC, never answered
+TIME_REQUEST = 0x17           # module -> server, empty; the server answers type 1 with a 4-byte LE Unix time
+QUERY = 0x20                  # module -> server, 1 payload byte (0 or 1); the server answers type 1 or 2
+ACKED_KINDS = {DATA}          # data frames get the 7-byte ack
+STATS_INTERVAL = 60
 HEADER = 19
 RECORD = 7
 MAX_LENGTH = 1024
+FLAG = 0x10000                # bit 16 of a record id: no valid value (always 0 in the archive, even with the compressor running)
+CLOCK_UNSET = {0, 0xFFFFFFFF}  # frame header time before the module has asked for the time (first frames after it boots)
+SENTINELS = {32767, -32768}   # raw values of a x0.1 sensor with no reading (room_c 3276.7 right after a module boot)
+# Shape (frame type, payload length) of the vendor's replies to the module's 0x20 queries, constant from 23 Oct to 26 Nov 2026.
+# The payload of the 20:00 reply is module-specific (it contains the id from the data frame headers), so it is not built in:
+# it is learned while the vendor answers, or set with [cloud] replies.
+REPLY_SHAPES = {'20:00': (0x01, 20), '20:01': (0x02, 1)}
+DEFAULT_REPLIES = {'20:01': '02:02'}
 
 # Record ids identified from community findings, vendor metrics exports, and live captures.
 FIELDS = {
@@ -57,6 +71,14 @@ FIELDS = {
     251: ('tmg_c', 0.1),
     279: ('ot_room_setpoint_c', 0.1),
 }
+
+
+# Open-circuit readings when the sensor is not fitted (tbr, tzc, tmg); decoded but never written to InfluxDB.
+OPEN_CIRCUIT = {189, 241, 251}
+# Unknown ids that read 0 are not stored, except these: electric element and active cooling kWh, which should stay 0.
+WATCHED = {10, 12, 14}
+# monitor_state bits (status code 539E)
+COMPRESSOR, DHW, HEATING, ELEMENT = 1024, 4, 16, 2048
 
 
 def checksum(data):
@@ -120,13 +142,47 @@ def decode(frame):
     records = frame.raw[HEADER:-2]
     if frame.kind != DATA or not records or len(records) % RECORD:
         return None
-    fields = {'frame_time': int.from_bytes(frame.raw[9:13], 'little')}
+    clock = int.from_bytes(frame.raw[9:13], 'little')
+    fields = {'frame_time': None if clock in CLOCK_UNSET else clock}
     for i in range(0, len(records), RECORD):
         record_id = int.from_bytes(records[i:i + 3], 'little')
         value = int.from_bytes(records[i + 3:i + 7], 'little', signed=True)
+        if record_id & FLAG:
+            continue                    # e.g. 65543 (id 7) and 65773 (id 237): the value is a placeholder 0
         name, scale = FIELDS.get(record_id, ('id_%d' % record_id, 1))
+        if scale != 1 and value in SENTINELS:
+            continue
         fields[name] = round(value * scale, 1) if scale != 1 else value
+    state = fields.get('monitor_state')
+    if state is not None:
+        on = bool(state & COMPRESSOR)
+        fields.update(compressor_on=int(on), dhw_on=int(on and bool(state & DHW)),
+                      heat_on=int(on and bool(state & HEATING)), element_on=int(bool(state & ELEMENT)))
     return fields
+
+
+def storable(fields):
+    """The fields worth keeping in InfluxDB: no open-circuit sensors and no unknown ids stuck at 0.
+
+    Nothing from a frame sent before the module's clock was set: after a boot those carry placeholders
+    (setpoint 0, distribution state 0, control value 0). The archive keeps them.
+    """
+    if fields.get('frame_time') is None:
+        return {}
+    drop = {FIELDS[i][0] for i in OPEN_CIRCUIT if i in FIELDS}
+    watched = {'id_%d' % i for i in WATCHED}
+    return {k: v for k, v in fields.items()
+            if k not in drop and (not k.startswith('id_') or v != 0 or k in watched)}
+
+
+def parse_reply(text):
+    """'kk:hex' (frame type and payload) -> (kind, payload bytes), or None if malformed."""
+    try:
+        kind, payload = text.split(':')
+        kind, payload = int(kind, 16), bytes.fromhex(payload)
+    except (AttributeError, ValueError):
+        return None
+    return (kind, payload) if kind <= 0xFF and len(payload) <= MAX_LENGTH else None
 
 
 def line(measurement, fields, when):
@@ -192,6 +248,69 @@ class Bridge:
         self.allow = set(config['allow'])
         self.sink = sink
         self.archive = archive or Archive('')
+        self.stats = collections.Counter()
+        self.replies_path = Path(config['archive_directory']) / 'learned_replies.json' if config.get('archive_directory') else None
+        self.replies = self._load_replies()
+
+    def _load_replies(self):
+        replies = dict(DEFAULT_REPLIES)
+        for key, value in self.config.get('replies', {}).items():
+            if parse_reply(value) and self.acceptable(key, value):
+                replies[key] = value
+            else:
+                log.warning('ignoring configured reply %r: %r', key, value)
+        if not self.replies_path:
+            return replies
+        try:
+            stored = json.loads(self.replies_path.read_text())
+        except FileNotFoundError:
+            return replies
+        except (OSError, ValueError) as error:
+            log.warning('ignoring %s (%r); using the built-in replies', self.replies_path, error)
+            return replies
+        for key, value in (stored.items() if isinstance(stored, dict) else ()):
+            if parse_reply(value) and self.acceptable(key, value):
+                replies[key] = value
+            else:
+                log.warning('ignoring stored reply %r: %r', key, value)
+        return replies
+
+    @staticmethod
+    def acceptable(key, value):
+        """A plausible answer to a query: never an empty ack, and the observed type and size where those are known."""
+        kind, payload = parse_reply(value)
+        shape = REPLY_SHAPES.get(key)
+        return bool(payload) and (not shape or (kind, len(payload)) == shape)
+
+    def learn(self, request, reply):
+        """Remember what the real server answered to a query, so that the answer can be repeated if it goes away."""
+        key = '%02x:%s' % (request[0], request[1].hex())
+        value = '%02x:%s' % (reply.kind, reply.raw[5:-2].hex())
+        if self.replies.get(key) == value:
+            return
+        if not self.acceptable(key, value):
+            log.info('not learning %s as the reply to %s', value, key)
+            return
+        self.replies[key] = value
+        log.info('learned server reply to %s: %s', key, value)
+        if self.replies_path:
+            temporary = self.replies_path.with_name(self.replies_path.name + '.tmp')
+            temporary.write_text(json.dumps(self.replies, indent=1))
+            os.replace(temporary, self.replies_path)   # a restart mid-write never leaves a truncated file
+
+    def local_reply(self, frame):
+        """What to send for a module frame when the real server is not answering, or None."""
+        if frame.kind in ACKED_KINDS:
+            return build(frame.seq, ACK)
+        if frame.kind == TIME_REQUEST:
+            return build(frame.seq, ACK, int(time.time()).to_bytes(4, 'little'))
+        if frame.kind == QUERY:
+            known = parse_reply(self.replies.get('%02x:%s' % (frame.kind, frame.raw[5:-2].hex()), ''))
+            if known:
+                return build(frame.seq, *known)
+            self.stats['unanswered'] += 1
+            log.warning('no known reply to query %s', frame.raw.hex())
+        return None
 
     async def start(self):
         if not self.allow:
@@ -199,14 +318,36 @@ class Bridge:
         server = await asyncio.start_server(self.handle, self.config['listen'], self.config['port'])
         log.info('listening on %s, mode %s, upstream %s:%d', ', '.join(str(s.getsockname()) for s in server.sockets),
                  self.config['mode'], *self.upstream)
+        if self.sink and self.config.get('bridge_measurement'):
+            self.reporter = asyncio.create_task(self._report())
         return server
 
-    def record(self, direction, peer, frame):
+    async def _report(self):
+        """Once a minute, the bridge's own counters since the last report."""
+        names = ('connections', 'hello', 'time_requests', 'queries', 'local_replies', 'upstream_failures', 'unanswered')
+        while True:
+            await asyncio.sleep(STATS_INTERVAL)
+            counts, self.stats = self.stats, collections.Counter()
+            self.sink.put(line(self.config['bridge_measurement'], {n: counts[n] for n in names}, time.time()))
+
+    def record(self, direction, peer, frame, pending=None):
+        """Archive, count and store one frame. pending maps seq -> (kind, payload) of this connection's open requests."""
         self.archive.write(direction, peer, frame)
         log.debug('%s %s %s', peer, direction, frame.raw.hex())
+        if direction == 'local':
+            self.stats['local_replies'] += 1
+        elif direction == 'down' and pending is not None:
+            request = pending.pop(frame.seq, None)
+            if request and request[0] == QUERY:
+                self.learn(request, frame)
         if direction != 'up':
             return
-        fields = decode(frame)
+        names = {HELLO: 'hello', TIME_REQUEST: 'time_requests', QUERY: 'queries'}
+        if frame.kind in names:
+            self.stats[names[frame.kind]] += 1
+        if frame.kind in (TIME_REQUEST, QUERY) and pending is not None:
+            pending[frame.seq] = (frame.kind, frame.raw[5:-2])
+        fields = storable(decode(frame) or {})
         if fields and self.sink:
             self.sink.put(line(self.config['measurement'], fields, time.time()))
 
@@ -217,10 +358,12 @@ class Bridge:
             writer.close()
             return
         upstream = None
+        self.stats['connections'] += 1
         if self.config['mode'] != 'standalone':
             try:
                 upstream = await asyncio.wait_for(asyncio.open_connection(*self.upstream), self.config['connect_timeout'])
             except (OSError, asyncio.TimeoutError) as error:
+                self.stats['upstream_failures'] += 1
                 if self.config['mode'] == 'relay':
                     log.warning('upstream %s:%d unreachable (%r); closing %s', *self.upstream, error, peer)
                     writer.close()
@@ -242,13 +385,15 @@ class Bridge:
         return await asyncio.wait_for(stream.read(4096), self.config['idle_timeout'])
 
     async def _relay(self, peer, reader, writer, up_reader, up_writer):
+        pending = {}        # per connection: a request left unanswered here must not match a later connection's frame
+
         async def pump(source, target, direction):
             parser = FrameReader()
             while data := await self._read(source):
                 target.write(data)          # forward bytes untouched; parsing is only a copy
                 await target.drain()
                 for frame in parser.feed(data):
-                    self.record(direction, peer, frame)
+                    self.record(direction, peer, frame, pending)
 
         tasks = [asyncio.create_task(pump(reader, up_writer, 'up')), asyncio.create_task(pump(up_reader, writer, 'down'))]
         await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
@@ -263,10 +408,10 @@ class Bridge:
         while data := await self._read(reader):
             for frame in parser.feed(data):
                 self.record('up', peer, frame)
-                if frame.kind in ACKED_KINDS:
-                    reply = Frame(build(frame.seq, ACK))
-                    writer.write(reply.raw)
-                    self.record('local', peer, reply)
+                raw = self.local_reply(frame)
+                if raw:
+                    writer.write(raw)
+                    self.record('local', peer, Frame(raw))
             await writer.drain()
 
 

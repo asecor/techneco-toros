@@ -34,7 +34,9 @@ graph LR
 
 ## hp_live fields
 
-### Live temperatures and status (98-byte and 63-byte frames, about every 30 s)
+### Live temperatures and status (63-byte frames every ~30 s, 98-byte frames every ~2 min)
+
+The 63-byte frames carry `tvi_c`, `tvu_c`, `fvd_hz`, `monitor_state` and the lockout flag. The 98-byte frames, about every 2 minutes, carry the condenser temperatures `tci_c`, `tcu_c` and `tau_c`, the outdoor, room and hot water temperatures and the setpoints. Align the two rates when computing a ΔT.
 
 | Field | Meaning | Record id | Scaling / unit |
 |---|---|---|---|
@@ -58,6 +60,16 @@ graph LR
 | `monitor_state` | heat pump operating state bitfield (1 = standby) | 235 | bitfield |
 | `fw_crc` | controller firmware CRC code (CRC LuP), constant | 237 | integer |
 | `frame_time` | Unix timestamp inside frame header | header | seconds |
+| `compressor_on`, `dhw_on`, `heat_on`, `element_on` | derived from `monitor_state` (bit 1024 compressor, 4 hot water, 16 heating, 2048 element) | derived | 0 or 1 |
+
+What is written to InfluxDB (the archive keeps every frame):
+
+- Open-circuit sensors (ids 189, 241, 251: `tbr_c`, `tzc_solar_c`, `tmg_c`) and unknown ids that read 0 are not stored. Ids 10, 12 and 14 always are, so an electric element run shows up.
+- Records whose id has bit 16 set are skipped. The flag means "no valid value": across 23 Oct to 26 Nov 2026 all 2,314 flagged records read 0, including 72 for the flow sensor (id 7, arriving as 65543) while the compressor ran and the unflagged reading was about 51 Hz, and one for the firmware CRC (id 237 as 65773, normally 2205).
+- A ×0.1 °C reading of raw 32767 or -32768 is skipped (the room temperature read 32767 right after a module boot).
+- Nothing is stored from frames whose header time is 0 or `0xFFFFFFFF`. The module sends these after it boots, before it asks for the time, and their values are placeholders (setpoint 0, distribution state 0, control value 0). On 26 Nov 2026 six such frames arrived within 3 seconds.
+
+On the author's deployment the older fields of these names were also removed from the measurement.
 
 Records 189, 241 and 251 read as implausible values (for example -62 °C, 196.8 °C or thousands of °C) when the sensor is not installed. These are open-circuit readings, not temperatures. Ignore them in graphs.
 
@@ -94,13 +106,15 @@ The controller's own lifetime energy counters. Each is a single byte (0 to 255 k
 | 13 | `Passief_koel_kWh` | `kwh_cooling_passive` | Passive cooling (pumps) |
 | 14 | `Actief_koel_kWh` | not mapped | Active cooling with the compressor |
 
-When graphing these, handle the wrap at 256, for example with `non_negative_derivative`, or by unwrapping in the query.
+When graphing these, handle the wrap at 256. `non_negative_difference` drops the step across a wrap. The dashboard's kWh tiles instead take hourly differences, count a step of -255 to -236 as a wrap (+256) and ignore any step outside 0 to 20 kWh as a bad reading (see `grafana/toros-heatpump.dashboard.json`, panels 30 to 33).
 
-**Relabelled 2026-10-24.** The community register map's labels for records 9, 11 and 197 do not match this unit. During a hot-water-only run on 2026-10-23 (16:44 to 18:07 UTC: setpoint 60 °C, distribution state 7, cylinder 50.7 to 55.2 °C, heating hours and starts unchanged), record 198 (hot water starts) stepped at the start, and records 9 and 197 each stepped by 1 at 17:32; record 11 did not move. Their rise since the last vendor export (Feb 2026) agrees: record 197 +505 h against about 490 h of hot water a year, record 9 +473 kWh (one wrap) against about 506 kWh predicted. Record 11 as heating is by elimination and its +28 kWh fits the +67 heating hours; it still needs a heating run to confirm. Record 224 stayed constant through the 83-minute run, so it is not a running hour counter. Before 2026-10-24 the same values are stored under the old names too (backfilled under the new names, old fields kept).
+**Relabelled 2026-10-24.** The community register map's labels for records 9, 11 and 197 do not match this unit. During a hot-water-only run on 2026-10-23 (16:44 to 18:07 UTC: setpoint 60 °C, distribution state 7, cylinder 50.7 to 55.2 °C, heating hours and starts unchanged), record 198 (hot water starts) stepped at the start, and records 9 and 197 each stepped by 1 at 17:32; record 11 did not move. Their rise since the last vendor export (Feb 2026) agrees: record 197 +505 h against about 490 h of hot water a year, record 9 +473 kWh (one wrap) against about 506 kWh predicted. Record 11 as heating was confirmed on 2026-11-07: a 390-minute heating run (state 1040) stepped record 11 three times and record 220 four times, and record 9 did not move. Record 224 stayed constant through the 83-minute run, so it is not a running hour counter. Before 2026-10-24 the same values are stored under the old names too (backfilled under the new names, old fields kept).
 
 ### Runtime counters as a power proxy
 
-The hour counters (records 224, 220 and 197) do not wrap. Compared against a vendor metrics export from a Toros Vision TVPT 2, the heating counter gained about 3.3 kW per run hour, which matches the unit's 3.3 kW single-phase compressor. The standby counter averaged about 4 W. Multiplying run hours by the rated compressor power therefore approximates energy over longer periods.
+The hour counters (records 197 and 220) do not wrap. On this unit (23 Oct to 11 Nov 2026, from `monitor_state` at 30 s resolution) hot water used about 1.0 kWh per compressor hour (39 kWh over 38.4 h) and heating about 1.1 kWh per hour (30 kWh over 27.2 h); the vendor export year gave 0.76 and 1.0. Earlier text here said 3.3 kW per run hour, which does not fit this unit. Record 224 never moved (4,119) and is not a run-hour counter. The standby counter (record 8) stayed at 127 for 20 days, where about 4 W would have added about 2 kWh, so it may be stuck.
+
+Per-run energy: `compressor_on`, `dhw_on` and `heat_on` are written every 30 s, so run minutes are known to 30 s. Multiply by the kWh-per-hour figures above; the 1 kWh counters only confirm the totals.
 
 ### Cross-checking a mapping
 
@@ -133,10 +147,36 @@ Run these from `deploy/cloud/`.
 - Roll back to the vendor cloud only: remove the DNS override, clear the DNS cache on your resolver, then stop the container. The module goes straight to the vendor again.
 - After a vendor shutdown nothing needs to change: `auto` answers locally. Check that `hp_live` keeps growing and that the archive shows `local` acks.
 
+## Frames other than data
+
+Besides the `0x30` data frames the module and the vendor exchange:
+
+| Frame | Direction | Content |
+|---|---|---|
+| `0x12` hello, 35 bytes | module to server, about every 10 s (a new TCP connection each time) | firmware string `00.06` and the MAC. Never answered |
+| `0x17`, 7 bytes | module to server, occasionally | time request. The server answers type 1 with a 4-byte LE Unix time |
+| `0x20` query, 8 bytes, payload `00` or `01` | module to server, about every 10 min | the server answers payload `00` with a type 1 frame (20 bytes, constant for 20 days: module configuration, unknown meaning) and payload `01` with a type 2 frame holding `02` |
+
+The replies to `0x20` queries did not change from 23 Oct to 26 Nov 2026. The bridge gets them from three places, later ones overriding earlier ones:
+
+1. Built in: the reply to `20:01` (type 2, payload `02`). The reply to `20:00` is not built in, because its payload is specific to the module (it contains the 4-byte id from the data frame headers).
+2. `[cloud.replies]` in `config.toml`, for example `"20:00" = "01:<40 hex digits>"`. Copy the value from `learned_replies.json` so that standalone mode keeps working if that file is lost. Keep it out of public repositories.
+3. Learned: in `auto` and `relay` mode the bridge stores the server's replies in `learned_replies.json` in the archive directory.
+
+A reply is matched to its query by sequence number within the same TCP connection only. It is accepted, from any of the three sources, only if it has a payload and, for `20:00` and `20:01`, the observed frame type and payload size (type 1 with 20 bytes, type 2 with 1 byte). The learned file is written atomically and checked on load: malformed entries are ignored, and an unreadable file is ignored as a whole.
+
+Before this check, an unanswered query on one connection could match a later data ack with the same sequence number, so the stored reply to `20:00` alternated between the configuration frame and an empty ack.
+
+When the vendor does not answer, or in `standalone` mode, the bridge answers locally: the 7-byte ack for data frames, the current time for `0x17`, and the known reply for `0x20`. Hellos get no reply, as with the vendor. A query with no known reply is logged and counted as `unanswered`. Standalone behaviour is covered by unit tests only; it has not been run against the module.
+
+### Bridge metric `hp_bridge`
+
+Once a minute, counts since the previous point (the first point is written one minute after the bridge starts): `connections`, `hello`, `time_requests`, `queries`, `local_replies` (frames the bridge answered itself), `upstream_failures` (vendor did not accept the connection) and `unanswered`. `hello` per minute is a heartbeat for the module; `local_replies` and `upstream_failures` show the vendor getting slow or going away. Configure the measurement name with `[cloud] bridge_measurement` (default `hp_bridge`, empty disables it).
+
 ## Risks and limits
 
 - **Depends on the DNS override.** If the override stops applying (for example a device or resolver ignores local DNS, or the cache expires with the wrong answer), the module talks to the vendor directly and `hp_live` stops. The dashboard's "Last data" stat shows this.
-- **Unknown server messages.** Only the 7-byte ack has been seen from the vendor. If the vendor sends anything else the module needs (time, commands), standalone mode will not reproduce it. The archive records every downstream frame so this can be checked.
+- **Unknown server messages.** Over 20 days the vendor sent only the ack, the time reply and the two query replies above. Standalone mode reproduces all of them, but whether the module is happy with the repeated configuration reply and a local clock is untested.
 - InfluxDB writes are unauthenticated. Keep the database on a trusted network or adapt the writer.
 - Once standalone, the vendor's engineers lose remote access to the unit.
 - The archive grows by about 0.5 MB a day. Prune old files by hand if needed.

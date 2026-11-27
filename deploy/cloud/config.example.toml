@@ -10,4 +10,12 @@ idle_timeout = 900
 influx_url = "http://influxdb:8086"
 influx_db = "toros"
 measurement = "hp_live"
+# bridge health counters, one point a minute; "" disables them
+bridge_measurement = "hp_bridge"
 archive_directory = "/data/archive"
+# Optional: replies to the module's 0x20 queries, used when the vendor does not answer (as in standalone mode).
+# The bridge learns them into <archive_directory>/learned_replies.json while the vendor answers; setting them here
+# keeps standalone mode working if that file is lost. Copy the values from learned_replies.json. The 20:00 reply
+# is specific to your module; keep it out of public repositories.
+# [cloud.replies]
+# "20:00" = "01:<40 hex digits from learned_replies.json>"

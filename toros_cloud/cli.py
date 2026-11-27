@@ -22,7 +22,9 @@ def load_config(path):
         "influx_url": "",
         "influx_db": "toros",
         "measurement": "hp_live",
+        "bridge_measurement": "hp_bridge",
         "archive_directory": "",
+        "replies": {},
     }
     unknown = set(config) - set(defaults)
     if unknown:
@@ -34,6 +36,8 @@ def load_config(path):
         raise ValueError("[cloud] port must be between 1 and 65535")
     if not isinstance(defaults["allow"], list) or not all(isinstance(ip, str) for ip in defaults["allow"]):
         raise ValueError("[cloud] allow must be a list of IP address strings")
+    if not isinstance(defaults["replies"], dict) or not all(isinstance(v, str) for v in defaults["replies"].values()):
+        raise ValueError('[cloud] replies must be a table of "query" = "type:payload hex" strings')
     return defaults
 
 
